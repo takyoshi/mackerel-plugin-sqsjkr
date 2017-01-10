@@ -50,16 +50,12 @@ func fakeDial(proto, addr string) (conn net.Conn, err error) {
 func (sp SQSJkrPlugin) FetchMetrics() (map[string]interface{}, error) {
 	// get sqsjkr stats
 	var sta sqsjkr.StatsItem
-	conn, err := net.Dial("unix", sp.Socket)
-	if err != nil {
-		return nil, err
-	}
 
 	tr := &http.Transport{
 		Dial: fakeDial,
 	}
 	client := &http.Client{Transport: tr}
-	res, err := http.Get("http:///dummy.local/stats/metrics")
+	res, err := client.Get("http:///dummy.local/stats/metrics")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err

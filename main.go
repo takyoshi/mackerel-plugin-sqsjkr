@@ -4,18 +4,22 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
-	"net/url"
 
 	"github.com/kayac/sqsjkr"
 	mp "github.com/mackerelio/go-mackerel-plugin-helper"
 )
 
+// Default value
+const (
+	DefaultSocketPath = "/var/run/sqsjkr.sock"
+)
+
 // SQSJkrPlugin mackerel plugin
 type SQSJkrPlugin struct {
 	Tempfile string
-	Port     int
-	Host     string
+	Socket   string
 	Prefix   string
 }
 
@@ -38,16 +42,24 @@ func (sp SQSJkrPlugin) MetricKeyPrefix() string {
 	return sp.Prefix
 }
 
+func fakeDial(proto, addr string) (conn net.Conn, err error) {
+	return net.Dial("unix", socket)
+}
+
 // FetchMetrics interface for mackerel plugin
 func (sp SQSJkrPlugin) FetchMetrics() (map[string]interface{}, error) {
 	// get sqsjkr stats
 	var sta sqsjkr.StatsItem
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%d", sp.Host, sp.Port),
-		Path:   "/stats/metrics",
+	conn, err := net.Dial("unix", sp.Socket)
+	if err != nil {
+		return nil, err
 	}
-	res, err := http.Get(endpoint.String())
+
+	tr := &http.Transport{
+		Dial: fakeDial,
+	}
+	client := &http.Client{Transport: tr}
+	res, err := http.Get("http:///dummy.local/stats/metrics")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -68,22 +80,20 @@ func (sp SQSJkrPlugin) FetchMetrics() (map[string]interface{}, error) {
 	return stats, nil
 }
 
+var (
+	socket  string
+	tmpfile string
+	prefix  string
+)
+
 func main() {
-	var (
-		port    int
-		host    string
-		tmpfile string
-		prefix  string
-	)
-	flag.StringVar(&host, "host", "localhost", "sqsjkr hostname")
-	flag.IntVar(&port, "port", 8061, "sqsjkr hostname")
+	flag.StringVar(&socket, "socket", DefaultSocketPath, "sqsjkr stats api socket path")
 	flag.StringVar(&tmpfile, "tempfile", "", "tmpfile")
 	flag.StringVar(&prefix, "metric-key", "sqsjkr", "tmpfile")
 	flag.Parse()
 
 	p := SQSJkrPlugin{
-		Port:     port,
-		Host:     host,
+		Socket:   socket,
 		Tempfile: tmpfile,
 		Prefix:   prefix,
 	}
